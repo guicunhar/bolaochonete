@@ -32,7 +32,7 @@ def ensure_headers(worksheet, headers: List[str]):
         worksheet.update("A1", [headers])
 
 def init(service_account_file: str = "service_account.json"):
-    with st.spinner("🔄 Carregando dados"):
+    with st.spinner("🔄 Aguarde"):
         usuarios, palpites, resultados, criterios= _open_sheets(service_account_file)
         ensure_headers(usuarios, ["username", "name","password_hash"])
         ensure_headers(palpites, ["username", "id_jogo", "palpite"])
@@ -67,3 +67,8 @@ def validate_login(username: str, password: str, service_account_file: str = "se
             return False, "Senha incorreta"
 
     return False, "Usuário não encontrado"
+
+def sidebar():
+    st.sidebar.page_link('01_Tabela.py', label='Classificação')
+    st.sidebar.page_link('pages/02_Login.py', label='Login')
+    st.sidebar.page_link('pages/03_Meus_Palpites.py', label='Meus Palpites')

@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
-from database import init 
-
+from database import init, sidebar
 
 st.title("🏆 Classificação do Bolão")
 st.write("Tabela baseada nos palpites enviados pelos usuários e nos resultados oficiais.")
 
+sidebar()
 
 # ---------------------------------------
 # 🔥 Função CACHEADA para ler o Google Sheets
@@ -53,9 +53,9 @@ df.loc[
 # ---------------------------------------
 classificacao = (
     df.groupby("username")["pontos"]
-      .sum()
-      .reset_index()
-      .sort_values("pontos", ascending=False)
+    .sum()
+    .reset_index()
+    .sort_values("pontos", ascending=False)
 )
 
 st.subheader("📊 Classificação Atual do Bolão")

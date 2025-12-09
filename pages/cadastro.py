@@ -1,6 +1,8 @@
 import streamlit as st
 import base64
-from database import create_user
+from database import create_user, sidebar
+
+sidebar()
 
 st.set_page_config(page_title="Cadastro - Bolão da Copa")
 
@@ -37,7 +39,5 @@ if submit:
 
     if ok:
         st.success(msg)
-        st.info("Agora você pode fazer login.")
-        st.page_link("pages/login.py", label="Ir para a página de login")
     else:
         st.error(msg)
