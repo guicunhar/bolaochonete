@@ -19,8 +19,7 @@ if st.session_state["logged"] == False:
             st.session_state["username"] = username
             st.session_state["name"] = msg
             st.success(f"Bem-vindo, {msg}!")
-
-            
+        
         else:
             st.error(msg)
 else:

@@ -1,5 +1,5 @@
 import streamlit as st
-import base64
+import gspread
 from database import create_user, sidebar
 
 sidebar()

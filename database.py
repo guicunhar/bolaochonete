@@ -11,53 +11,51 @@ SCOPES = [
 
 SPREADSHEET_NAME = "bolaochonete"
 USERS_SHEET = "usuarios"
-PALPITES_SHEET = "palpites"
-RESULTADOS_SHEET = "resultados"
 CRITERIOS_SHEET = "criterios"
 
 def _open_sheets(service_account_file: str = "service_account.json"):
     creds = Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
     client = gspread.authorize(creds)
     sheet = client.open(SPREADSHEET_NAME)
+
     usuarios = sheet.worksheet(USERS_SHEET)
-    palpites = sheet.worksheet(PALPITES_SHEET)
-    resultados = sheet.worksheet(RESULTADOS_SHEET)
     criterios = sheet.worksheet(CRITERIOS_SHEET)
-    return usuarios, palpites, resultados, criterios
 
-
-def ensure_headers(worksheet, headers: List[str]):
-    current = worksheet.row_values(1)
-    if current != headers:
-        worksheet.update("A1", [headers])
+    return client, sheet, usuarios, criterios
 
 def init(service_account_file: str = "service_account.json"):
     with st.spinner("🔄 Aguarde"):
-        usuarios, palpites, resultados, criterios= _open_sheets(service_account_file)
-        ensure_headers(usuarios, ["username", "name","password_hash"])
-        ensure_headers(palpites, ["username", "id_jogo", "palpite"])
-        ensure_headers(resultados, ["id_jogo","fase", "resultado", "realA", "realB"])
-        ensure_headers(criterios, ["fase","acerto_total","acerto_parcial"])
-    return usuarios, palpites, resultados, criterios
+        return _open_sheets(service_account_file)
 
 
 def create_user(username: str, name: str, password: str, service_account_file: str = "service_account.json"):
-    usuarios, _, _, _ = init(service_account_file)
-    records = usuarios.get_all_records()
+    client, sheet, usuarios, _ = init(service_account_file)
 
+    # Verificar se usuário já existe
+    records = usuarios.get_all_records()
     for r in records:
         if r.get("username") == username:
             return False, "Usuário já existe"
 
+    # Criar hash da senha
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-    usuarios.append_row([username, name, password_hash])
+    linha = len(records) + 2  # +2 para considerar header e próxima linha
+    usuarios.append_row(
+        [username, name, password_hash, f'=SOMA(INDIRETO(A{linha} & "!I:I"))'],
+        value_input_option="USER_ENTERED"
+    )
+
+    # Copiar MODELO
+    modelo = sheet.worksheet("MODELO")
+    new_sheet_info = modelo.copy_to(sheet.id)
+    new_sheet = client.open_by_key(sheet.id).get_worksheet_by_id(new_sheet_info['sheetId'])
+    new_sheet.update_title(username)
+
     return True, "Usuário criado com sucesso"
 
-
-
 def validate_login(username: str, password: str, service_account_file: str = "service_account.json") -> Tuple[bool, str]:
-    usuarios, _, _ , _ = init(service_account_file)
+    client, sheet, usuarios, _ = init(service_account_file)
 
     for r in usuarios.get_all_records():
         if r["username"] == username:
@@ -67,6 +65,7 @@ def validate_login(username: str, password: str, service_account_file: str = "se
             return False, "Senha incorreta"
 
     return False, "Usuário não encontrado"
+
 
 def sidebar():
     st.sidebar.page_link('01_Tabela.py', label='Classificação')

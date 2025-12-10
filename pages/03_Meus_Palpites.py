@@ -1,61 +1,90 @@
 import streamlit as st
+import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
 from database import sidebar
+from datetime import datetime
 
 sidebar()
 
-RODADAS = {
-    1: [("Brasil", "Argentina"), ("França", "Alemanha")],
-    2: [("Portugal", "Espanha"), ("Inglaterra", "Itália")],
-    3: [("Uruguai", "Holanda"), ("México", "Chile")],
-}
+# --- Autenticação Google ---
+SHEET_NAME = "bolaochonete"
+credentials = Credentials.from_service_account_file(
+    "service_account.json",
+    scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+)
+gc = gspread.authorize(credentials)
+sh = gc.open(SHEET_NAME)
+worksheet = sh.worksheet(st.session_state['username'])
 
-# Verifica login
-if not st.session_state.get("logged", False):
-    st.warning("Você precisa fazer login para acessar esta página.")
-else:
-    st.title("Palpites – Bolão da Copa")
-    st.markdown(f"<h4 style='text-align:center'>Bem-vindo, {st.session_state['name']}! Preencha seus palpites por rodada.</h4>", unsafe_allow_html=True)
+# --- Carregar dados ---
+def load_sheet():
+    values = worksheet.get_all_values()
+    headers = values[0]
+    fixed_headers = [h if h.strip() != "" else f"col_{i}" for i, h in enumerate(headers)]
+    return pd.DataFrame(values[1:], columns=fixed_headers)
 
-    # Seleciona a rodada
-    rodada = st.selectbox("Escolha a rodada", sorted(RODADAS.keys()))
-    jogos = RODADAS[rodada]
+# Inicializa session_state apenas se ainda não existir
+if "df_edit" not in st.session_state:
+    st.session_state.df_edit = load_sheet()
 
-    # Formulário de palpites
-    with st.form(key=f"form_rodada_{rodada}"):
-        palpites = {}
-        for idx, (time1, time2) in enumerate(jogos):
-            # Três colunas: Time1 | Inputs | Time2
-            col1, col_inputs, col2 = st.columns([3,2,3])
+df = st.session_state.df_edit
+formula_col = "Pontos"
 
-            # Time1
-            with col1:
-                st.markdown(
-                    f"<div style='display:flex; align-items:center; justify-content:center; height:95px;'><b>{time1}</b></div>",
-                    unsafe_allow_html=True
-                )
+# --- Determina quais índices NÃO devem ser editados ---
+blocked_indices = []
+for idx, row in df.iterrows():
+    data_str = row['Dia']
+    hora_str = row['Hora']
 
-            # Inputs
-            with col_inputs:
-                input1_col, input2_col = st.columns([1,1])
-                with input1_col:
-                    palpites[f"{idx}_time1"] = st.number_input("", min_value=0, max_value=20, step=1, key=f"{rodada}_{idx}_t1")
-                with input2_col:
-                    palpites[f"{idx}_time2"] = st.number_input("", min_value=0, max_value=20, step=1, key=f"{rodada}_{idx}_t2")
+    # Normaliza hora
+    if "h" in hora_str:
+        hora_str = hora_str.replace("h", ":")
+        if len(hora_str.split(":")[1]) == 0:
+            hora_str += "00"
 
-            # Time2
-            with col2:
-                st.markdown(
-                    f"<div style='display:flex; align-items:center; justify-content:center; height:95px;'><b>{time2}</b></div>",
-                    unsafe_allow_html=True
-                )
+    datetime_str = f"{data_str} {hora_str}"
+    try:
+        jogo_datetime = datetime.strptime(datetime_str, "%d/%m/%Y %H:%M")
+        if jogo_datetime <= datetime.now():
+            blocked_indices.append(idx)
+    except:
+        pass
 
-        enviar = st.form_submit_button("Enviar palpites")
-        if enviar:
-            st.success(f"Palpites da rodada {rodada} enviados com sucesso!")
-            for idx, (time1, time2) in enumerate(jogos):
-                t1 = palpites[f"{idx}_time1"]
-                t2 = palpites[f"{idx}_time2"]
-                st.markdown(
-                    f"<div style='text-align:center'>{time1} {t1} x {t2} {time2}</div>",
-                    unsafe_allow_html=True
-                )
+# --- Editor ---
+# Criamos uma cópia do DF e transformamos em string para "desabilitar" linhas passadas
+df_editor = df.copy()
+for idx in blocked_indices:
+    df_editor.loc[idx, "Gols A"] = df.loc[idx, "Gols A"]
+    df_editor.loc[idx, "Gols B"] = df.loc[idx, "Gols B"]
+
+edited_df = st.data_editor(
+    df_editor,
+    key="editor_sheet",
+    disabled=["Fase", "Dia", "Hora", "x", "Time A", "Time B", "Pontos"],
+    hide_index=True,
+    column_config={
+        "Gols A": st.column_config.NumberColumn("Gols A", format="%d"),
+        "Gols B": st.column_config.NumberColumn("Gols B", format="%d"),
+    }
+)
+
+# Botão para salvar alterações
+if st.button("💾 Salvar alterações"):
+    df_to_update = edited_df.drop(columns=[formula_col])
+
+    # Ignora alterações nas linhas bloqueadas
+    for idx in blocked_indices:
+        df_to_update.loc[idx, "Gols A"] = df.loc[idx, "Gols A"]
+        df_to_update.loc[idx, "Gols B"] = df.loc[idx, "Gols B"]
+
+    worksheet.update(
+        [df_to_update.columns.values.tolist()] + df_to_update.values.tolist(),
+        value_input_option="USER_ENTERED"
+    )
+
+    # Atualiza a planilha com pontuação
+    st.session_state.df_edit = load_sheet()
