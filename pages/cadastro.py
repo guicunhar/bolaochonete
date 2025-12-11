@@ -37,6 +37,9 @@ if submit:
 
     ok, msg = create_user(username, name, password)
 
+    if "logged" not in st.session_state:
+        st.session_state["logged"] = False
+
     if ok:
         st.success(msg)
     else:

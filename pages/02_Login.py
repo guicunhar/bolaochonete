@@ -19,6 +19,7 @@ if st.session_state["logged"] == False:
             st.session_state["username"] = username
             st.session_state["name"] = msg
             st.success(f"Bem-vindo, {msg}!")
+            st.switch_page("pages/03_Meus_Palpites.py")
         
         else:
             st.error(msg)
